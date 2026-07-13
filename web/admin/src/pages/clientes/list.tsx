@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardBody } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
+import { Pagination } from '@/components/ui/pagination';
 import { toast } from '@/components/ui/toast';
 
 interface FormState {
@@ -25,16 +26,20 @@ const empty: FormState = {
   email: '',
 };
 
+const limit = 10;
+
 export function ClientesListPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clientes'],
+    queryKey: ['clientes', page],
     queryFn: () =>
       apiRequest<Paginated<Cliente>>('/clientes', {
-        query: { page: 1, limit: 50 },
+        query: { page, limit },
       }),
+    placeholderData: (prev) => prev,
   });
 
   const createMut = useMutation({
@@ -165,6 +170,12 @@ export function ClientesListPage() {
               </TBody>
             </Table>
           )}
+          <Pagination
+            page={page}
+            limit={limit}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+          />
         </CardBody>
       </Card>
 

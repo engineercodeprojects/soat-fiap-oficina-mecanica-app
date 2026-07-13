@@ -7,28 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Dialog } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/utils';
-
-interface NotificacaoResponse {
-  id: string;
-  clienteId: string;
-  ordemDeServicoId: string | null;
-  tipo: string;
-  canal: string;
-  destinatario: string;
-  assunto: string;
-  mensagem: string;
-  status: 'PENDENTE' | 'ENVIADA' | 'FALHOU';
-  erro: string | null;
-  enviadaEm: string | null;
-  createdAt: string;
-}
-
-interface Paginated<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import type { Notificacao, Paginated } from '@/lib/api/types';
 
 const STATUS_TONES = {
   ENVIADA: 'success' as const,
@@ -39,12 +18,12 @@ const STATUS_TONES = {
 export function NotificacoesListPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [tipoFilter, setTipoFilter] = useState<string>('');
-  const [selected, setSelected] = useState<NotificacaoResponse | null>(null);
+  const [selected, setSelected] = useState<Notificacao | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['notificacoes'],
     queryFn: () =>
-      apiRequest<Paginated<NotificacaoResponse>>('/notificacoes', {
+      apiRequest<Paginated<Notificacao>>('/notificacoes', {
         query: { page: 1, limit: 100 },
       }),
   });

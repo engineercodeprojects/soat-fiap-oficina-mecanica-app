@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
+import { Pagination } from '@/components/ui/pagination';
 import { formatDate } from '@/lib/utils';
 
 const TIPO_TONE: Record<TipoMovimentacaoEstoque, 'success' | 'danger' | 'info' | 'warning' | 'purple'> = {
@@ -33,6 +34,8 @@ const TIPO_SIGN: Record<TipoMovimentacaoEstoque, '+' | '-' | '~'> = {
 export function ProdutoMovimentacoesPage() {
   const { id = '' } = useParams<{ id: string }>();
   const [tipoFilter, setTipoFilter] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   const { data: produto } = useQuery({
     queryKey: ['produto', id],
@@ -41,19 +44,20 @@ export function ProdutoMovimentacoesPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['produto-movimentacoes', id, tipoFilter],
+    queryKey: ['produto-movimentacoes', id, tipoFilter, page],
     queryFn: () =>
       apiRequest<Paginated<MovimentacaoEstoque>>(
         `/produtos/${id}/movimentacoes`,
         {
           query: {
-            page: 1,
-            limit: 100,
+            page,
+            limit,
             ...(tipoFilter ? { tipo: tipoFilter } : {}),
           },
         },
       ),
     enabled: !!id,
+    placeholderData: (prev) => prev,
   });
 
   return (
@@ -129,7 +133,10 @@ export function ProdutoMovimentacoesPage() {
             </label>
             <Select
               value={tipoFilter}
-              onChange={(e) => setTipoFilter(e.target.value)}
+              onChange={(e) => {
+                setTipoFilter(e.target.value);
+                setPage(1);
+              }}
               className="w-64"
             >
               <option value="">Todos os tipos</option>
@@ -181,9 +188,12 @@ export function ProdutoMovimentacoesPage() {
                     <TD className="text-sm text-slate-600">
                       {m.motivo ?? '-'}
                       {m.ordemDeServicoId && (
-                        <span className="ml-2 text-xs text-slate-400 font-mono">
+                        <Link
+                          to={`/ordens-servico/${m.ordemDeServicoId}`}
+                          className="ml-2 font-mono text-xs text-brand-700 hover:underline"
+                        >
                           OS:{m.ordemDeServicoId.slice(0, 8)}
-                        </span>
+                        </Link>
                       )}
                     </TD>
                   </TR>
@@ -198,6 +208,12 @@ export function ProdutoMovimentacoesPage() {
               </TBody>
             </Table>
           )}
+          <Pagination
+            page={page}
+            limit={limit}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+          />
         </CardBody>
       </Card>
     </div>

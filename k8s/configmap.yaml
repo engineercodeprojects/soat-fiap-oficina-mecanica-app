@@ -19,6 +19,9 @@ data:
   NOTIFICATION_WEBHOOK_URL: ""
   NOTIFICATION_WEBHOOK_TIMEOUT_MS: "5000"
   JWT_EXPIRES_IN: "1h"
-  # Origens permitidas no CORS. Ajuste para o dominio do front em producao.
-  WEB_ORIGINS: "http://localhost:5173,http://localhost:5174"
+  # Origens permitidas no CORS. Sem ingress no MVP, as UIs do cluster sao
+  # acessadas via `kubectl port-forward` -> localhost:8080 (admin) e :8081
+  # (cliente); por isso essas origens entram aqui. As portas 5173/5174 cobrem o
+  # `npm run dev` (Vite) local. Ajuste para o dominio do front em producao/ingress.
+  WEB_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:8080,http://localhost:8081"
   PUBLIC_BASE_URL: "http://localhost:3000"

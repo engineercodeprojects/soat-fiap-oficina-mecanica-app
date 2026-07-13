@@ -75,6 +75,10 @@ export class BuscarDetalhesOrdemDeServicoUseCase
       quantidade: i.quantidade,
       precoUnitario: i.precoUnitario,
       valorTotalDesseServico: i.subtotalServico(),
+      statusExecucao: i.statusExecucao,
+      inicioExecucao: i.inicioExecucao,
+      fimExecucao: i.fimExecucao,
+      horasTrabalhadas: i.horasTrabalhadas,
       produtos: i.produtos.map((p) => ({
         produtoId: p.produtoId,
         descricaoProduto:
@@ -90,6 +94,7 @@ export class BuscarDetalhesOrdemDeServicoUseCase
 
     return {
       cabecalho: {
+        numero: os.numero,
         dadosCliente: {
           id: cliente?.id ?? os.clienteId,
           nome: cliente?.nome ?? 'Cliente removido',
@@ -110,6 +115,7 @@ export class BuscarDetalhesOrdemDeServicoUseCase
         dataHoraUltimaAtualizacao: this.formatDateTime(os.updatedAt),
       },
       corpo: {
+        descricaoInicial: os.descricaoInicial,
         diagnostico: os.diagnostico,
         servicos,
       },

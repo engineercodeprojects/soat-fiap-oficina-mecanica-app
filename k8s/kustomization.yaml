@@ -15,12 +15,23 @@ resources:
   - app/deployment.yaml
   - app/service.yaml
   - app/hpa.yaml
+  # UIs (SPAs nginx). Escutam na 8080; acesso via port-forward (sem ingress no MVP).
+  - web/admin-deployment.yaml
+  - web/admin-service.yaml
+  - web/cliente-deployment.yaml
+  - web/cliente-service.yaml
 
-# Fonte unica da imagem para o Deployment e o Job de migrations.
+# Fonte unica das imagens para os Deployments e o Job de migrations.
 # Override sem editar manifesto:
-#   kubectl apply -k k8s/  (usa o default abaixo, apos `kind load docker-image`)
+#   kubectl apply -k k8s/  (usa os defaults abaixo, apos `kind load docker-image`)
 #   ou   kustomize edit set image oficina-mecanica-app=ghcr.io/<owner>/<repo>:<tag>
 images:
   - name: oficina-mecanica-app
     newName: oficina-mecanica-app
+    newTag: latest
+  - name: oficina-mecanica-web-admin
+    newName: oficina-mecanica-web-admin
+    newTag: latest
+  - name: oficina-mecanica-web-cliente
+    newName: oficina-mecanica-web-cliente
     newTag: latest

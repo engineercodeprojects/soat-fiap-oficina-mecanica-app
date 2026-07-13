@@ -1,0 +1,22 @@
+# Service ClusterIP: expoe a UI Cliente dentro do cluster (porta 8080).
+# Sem ingress no MVP — acesse de fora com (8081 local para nao colidir com o admin):
+#   kubectl port-forward -n oficina svc/oficina-web-cliente 8081:8080
+apiVersion: v1
+kind: Service
+metadata:
+  name: oficina-web-cliente
+  labels:
+    app.kubernetes.io/name: oficina-web-cliente
+    app.kubernetes.io/part-of: oficina-mecanica
+    app.kubernetes.io/component: web-cliente
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: oficina-web-cliente
+    app.kubernetes.io/component: web-cliente
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http
