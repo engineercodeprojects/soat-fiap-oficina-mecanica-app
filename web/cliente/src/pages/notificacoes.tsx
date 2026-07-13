@@ -3,53 +3,64 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest, ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatDate } from '@/lib/utils';
+import { Pagination } from '@/components/pagination';
+import type {
+  NotificacaoResponse,
+  Paginated,
+  StatusNotificacao,
+} from '@/lib/api/types';
 
-interface NotificacaoResponse {
-  id: string;
-  clienteId: string;
-  ordemDeServicoId: string | null;
-  tipo: string;
-  canal: string;
-  destinatario: string;
-  assunto: string;
-  mensagem: string;
-  status: 'PENDENTE' | 'ENVIADA' | 'FALHOU';
-  erro: string | null;
-  enviadaEm: string | null;
-  createdAt: string;
-}
-
-interface Paginated<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
+const PAGE_SIZE = 20;
 
 const TIPO_LABEL: Record<string, string> = {
   ORCAMENTO_PRONTO: 'Orçamento pronto para aprovação',
   OS_FINALIZADA: 'OS finalizada — veículo pronto',
+  STATUS_OS_ALTERADO: 'Status da OS atualizado',
 };
 
 const TIPO_TONE: Record<string, string> = {
   ORCAMENTO_PRONTO: 'bg-amber-100 text-amber-700',
   OS_FINALIZADA: 'bg-green-100 text-green-700',
+  STATUS_OS_ALTERADO: 'bg-blue-100 text-blue-700',
 };
+
+const CANAL_LABEL: Record<string, string> = {
+  EMAIL: 'E-mail',
+};
+
+const STATUS_LABEL: Record<StatusNotificacao, string> = {
+  PENDENTE: 'Envio pendente',
+  ENVIADA: 'Enviada',
+  FALHOU: 'Falha no envio',
+};
+
+const STATUS_TONE: Record<StatusNotificacao, string> = {
+  PENDENTE: 'bg-slate-100 text-slate-600',
+  ENVIADA: 'bg-green-100 text-green-700',
+  FALHOU: 'bg-red-100 text-red-700',
+};
+
+// Rotulo de tipo com fallback seguro para valores desconhecidos.
+function tipoLabel(tipo: string): string {
+  return TIPO_LABEL[tipo] ?? tipo ?? 'Notificacao';
+}
 
 export function NotificacoesPage() {
   const cpfCnpj = useAuthStore((s) => s.cpfCnpj) ?? '';
   const [selected, setSelected] = useState<NotificacaoResponse | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['minhas-notificacoes', cpfCnpj],
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey: ['minhas-notificacoes', cpfCnpj, page],
     queryFn: () =>
       apiRequest<Paginated<NotificacaoResponse>>(
         `/clientes/${cpfCnpj}/notificacoes`,
-        { query: { page: 1, limit: 50 } },
+        { query: { page, limit: PAGE_SIZE } },
       ),
     enabled: !!cpfCnpj,
     retry: false,
     refetchInterval: 30_000,
+    placeholderData: (prev) => prev,
   });
 
   if (!cpfCnpj) {
@@ -93,15 +104,17 @@ export function NotificacoesPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIPO_TONE[n.tipo] ?? 'bg-slate-100 text-slate-700'}`}
                     >
-                      {TIPO_LABEL[n.tipo] ?? n.tipo}
+                      {tipoLabel(n.tipo)}
                     </span>
-                    {n.status === 'FALHOU' && (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                        falha no envio
+                    {n.status !== 'ENVIADA' && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[n.status] ?? 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {STATUS_LABEL[n.status] ?? n.status}
                       </span>
                     )}
                   </div>
@@ -116,6 +129,13 @@ export function NotificacoesPage() {
               </div>
             </button>
           ))}
+          <Pagination
+            page={page}
+            limit={PAGE_SIZE}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            isFetching={isFetching}
+          />
         </div>
       )}
 
@@ -133,11 +153,18 @@ export function NotificacoesPage() {
           <div className="relative w-full max-w-2xl rounded-lg bg-white shadow-xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
               <div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIPO_TONE[selected.tipo] ?? 'bg-slate-100 text-slate-700'}`}
-                >
-                  {TIPO_LABEL[selected.tipo] ?? selected.tipo}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIPO_TONE[selected.tipo] ?? 'bg-slate-100 text-slate-700'}`}
+                  >
+                    {tipoLabel(selected.tipo)}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[selected.status] ?? 'bg-slate-100 text-slate-700'}`}
+                  >
+                    {STATUS_LABEL[selected.status] ?? selected.status}
+                  </span>
+                </div>
                 <h3 className="mt-2 text-lg font-semibold">
                   {selected.assunto}
                 </h3>
@@ -154,7 +181,40 @@ export function NotificacoesPage() {
                 ✕
               </button>
             </div>
-            <div className="px-6 py-4">
+            <div className="space-y-4 px-6 py-4">
+              {selected.status === 'FALHOU' && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                  <p className="font-medium">Nao foi possivel enviar esta notificacao.</p>
+                  <p className="mt-1">
+                    Motivo: {selected.erro ?? 'nao informado pelo sistema.'}
+                  </p>
+                </div>
+              )}
+              {selected.status === 'PENDENTE' && (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  Envio ainda pendente — sera processado em breve.
+                </div>
+              )}
+
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase text-slate-400">Canal</dt>
+                  <dd className="text-slate-700">
+                    {CANAL_LABEL[selected.canal] ?? selected.canal ?? '-'}
+                  </dd>
+                </div>
+                {selected.enviadaEm && (
+                  <div>
+                    <dt className="text-xs uppercase text-slate-400">
+                      Enviada em
+                    </dt>
+                    <dd className="text-slate-700">
+                      {formatDate(selected.enviadaEm)}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
               <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-4 font-sans text-sm">
                 {selected.mensagem}
               </pre>

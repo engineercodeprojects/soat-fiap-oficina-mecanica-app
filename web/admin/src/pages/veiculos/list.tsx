@@ -9,6 +9,7 @@ import { Card, CardBody } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
+import { Pagination } from '@/components/ui/pagination';
 import { toast } from '@/components/ui/toast';
 
 interface FormState {
@@ -28,16 +29,20 @@ const empty: FormState = {
   clienteId: '',
 };
 
+const limit = 10;
+
 export function VeiculosListPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data: veiculos, isLoading } = useQuery({
-    queryKey: ['veiculos'],
+    queryKey: ['veiculos', page],
     queryFn: () =>
       apiRequest<Paginated<Veiculo>>('/veiculos', {
-        query: { page: 1, limit: 50 },
+        query: { page, limit },
       }),
+    placeholderData: (prev) => prev,
   });
 
   const { data: clientes } = useQuery({
@@ -183,6 +188,12 @@ export function VeiculosListPage() {
               </TBody>
             </Table>
           )}
+          <Pagination
+            page={page}
+            limit={limit}
+            total={veiculos?.total ?? 0}
+            onPageChange={setPage}
+          />
         </CardBody>
       </Card>
 

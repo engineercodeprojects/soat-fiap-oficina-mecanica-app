@@ -103,6 +103,86 @@ export interface OrdemDeServico {
   updatedAt?: string;
 }
 
+/**
+ * View detalhada agrupada retornada por `GET /ordens-servico/:id`
+ * (cabecalho / corpo / rodape). Diferente do shape plano `OrdemDeServico`
+ * devolvido pelas mutacoes (POST/PATCH). Datas de execucao chegam como ISO
+ * string; `dataHora*` do cabecalho ja vem pre-formatadas pelo backend.
+ */
+export interface OsDetalhesProdutoItem {
+  produtoId: string;
+  descricaoProduto: string;
+  quantidade: number;
+  precoUnitario: number;
+  valorTotalDesseProduto: number;
+}
+
+export interface OsDetalhesServicoItem {
+  servicoId: string;
+  descricaoServico: string;
+  quantidade: number;
+  precoUnitario: number;
+  valorTotalDesseServico: number;
+  statusExecucao: 'PENDENTE' | 'EM_EXECUCAO' | 'CONCLUIDO';
+  inicioExecucao: string | null;
+  fimExecucao: string | null;
+  horasTrabalhadas: number | null;
+  produtos: OsDetalhesProdutoItem[];
+}
+
+export interface OsDetalhesView {
+  cabecalho: {
+    numero: string;
+    dadosCliente: {
+      id: string;
+      nome: string;
+      cpfCnpj: string;
+      email: string | null;
+      telefone: string;
+    };
+    dadosVeiculo: {
+      id: string;
+      placa: string;
+      marca: string;
+      modelo: string;
+      ano: number;
+    };
+    status: StatusOS;
+    mecanicoAtribuido: string | null;
+    dataHoraAbertura: string | null;
+    dataHoraUltimaAtualizacao: string | null;
+  };
+  corpo: {
+    descricaoInicial: string;
+    diagnostico: string | null;
+    servicos: OsDetalhesServicoItem[];
+  };
+  rodape: {
+    valorTotalServicos: number;
+    valorTotalProdutos: number;
+    valorTotalOrdemServico: number;
+  };
+}
+
+/** Corpo de `POST /ordens-servico` — abertura com servicos/pecas opcionais. */
+export interface CreateOsItemProduto {
+  produtoId: string;
+  quantidade: number;
+}
+
+export interface CreateOsItemServico {
+  servicoId: string;
+  quantidade: number;
+  produtos?: CreateOsItemProduto[];
+}
+
+export interface CreateOrdemDeServicoRequest {
+  clienteId: string;
+  veiculoId: string;
+  descricaoInicial: string;
+  servicos?: CreateOsItemServico[];
+}
+
 export interface Usuario {
   id: string;
   nome: string;
@@ -116,6 +196,34 @@ export interface Paginated<T> {
   total: number;
   page: number;
   limit: number;
+}
+
+export type StatusNotificacao = 'PENDENTE' | 'ENVIADA' | 'FALHOU';
+
+export interface Notificacao {
+  id: string;
+  clienteId: string;
+  ordemDeServicoId: string | null;
+  tipo: string;
+  canal: string;
+  destinatario: string;
+  assunto: string;
+  mensagem: string;
+  status: StatusNotificacao;
+  erro: string | null;
+  enviadaEm: string | null;
+  createdAt: string;
+}
+
+/** Entrada do audit log da OS (`GET /ordens-servico/:id/audit-log`). */
+export interface AuditLogEntry {
+  id: string;
+  acao: string;
+  statusAnterior: string | null;
+  statusNovo: string | null;
+  usuarioId: string | null;
+  metadata: unknown;
+  createdAt: string;
 }
 
 export interface TempoMedioPorServico {

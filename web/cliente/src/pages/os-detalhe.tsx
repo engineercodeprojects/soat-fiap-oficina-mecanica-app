@@ -3,37 +3,14 @@ import { Link, useParams } from 'react-router-dom';
 import { apiRequest } from '@/lib/api-client';
 import { toast } from '@/components/toast';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import type { OsStatus, OsStatusView } from '@/lib/api/types';
 
-interface OsStatusServico {
-  servicoId: string;
-  nome: string;
-  quantidade: number;
-  precoUnitario: number;
-  subtotal: number;
-  produtos?: OsStatusProduto[];
-}
-
-interface OsStatusProduto {
-  produtoId: string;
-  nome: string;
-  quantidade: number;
-  precoUnitario: number;
-  subtotal: number;
-}
-
-interface OsStatusView {
-  id: string;
-  numero: string;
-  status: string;
-  descricaoInicial: string;
-  diagnostico: string | null;
-  servicos: OsStatusServico[];
-  valorTotalServicos: number;
-  valorTotalProdutos: number;
-  valorTotal: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
+// Enquanto a OS nao entra em execucao, as pecas ficam reservadas.
+const RESERVED_PARTS_STATUS: ReadonlySet<OsStatus> = new Set<OsStatus>([
+  'RECEBIDA',
+  'EM_DIAGNOSTICO',
+  'AGUARDANDO_APROVACAO',
+]);
 
 const STATUS_TONE: Record<string, string> = {
   RECEBIDA: 'bg-blue-100 text-blue-700',
@@ -87,6 +64,9 @@ export function OsDetalhePage() {
   if (isLoading || !os)
     return <div className="text-slate-500">Carregando...</div>;
 
+  const hasProdutos = os.servicos.some((s) => (s.produtos ?? []).length > 0);
+  const partsReserved = RESERVED_PARTS_STATUS.has(os.status);
+
   return (
     <div className="space-y-6">
       <Link to="/" className="text-sm text-brand-700 hover:underline">
@@ -128,6 +108,17 @@ export function OsDetalhePage() {
 
       <section className="rounded-md border border-slate-200 bg-white p-6">
         <h2 className="font-semibold">Servicos e produtos / Orcamento</h2>
+        {hasProdutos && os.status !== 'CANCELADA' && (
+          <p
+            className={`mt-2 inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-medium ${
+              partsReserved
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-blue-100 text-blue-700'
+            }`}
+          >
+            {partsReserved ? 'Pecas reservadas' : 'Pecas em uso'}
+          </p>
+        )}
         <div className="mt-4 space-y-3">
           {os.servicos.map((s) => (
             <div
@@ -212,6 +203,15 @@ export function OsDetalhePage() {
       {os.status === 'FINALIZADA' && (
         <div className="rounded-md bg-green-50 p-4 text-sm text-green-800">
           Seu veiculo esta pronto para retirada!
+        </div>
+      )}
+
+      {os.status === 'CANCELADA' && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p className="font-medium">Orcamento rejeitado — OS cancelada.</p>
+          {hasProdutos && (
+            <p className="mt-1">As pecas reservadas foram liberadas.</p>
+          )}
         </div>
       )}
     </div>

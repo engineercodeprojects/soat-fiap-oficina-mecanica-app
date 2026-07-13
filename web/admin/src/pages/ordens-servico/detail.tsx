@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiRequest } from '@/lib/api-client';
+import { useAuthStore } from '@/lib/auth-store';
 import type {
-  Cliente,
+  AuditLogEntry,
   OrdemDeServico,
+  OsDetalhesView,
   Paginated,
   Produto,
   Servico,
   Usuario,
-  Veiculo,
 } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,30 +53,54 @@ function ItemExecucaoBadge({
   );
 }
 
+// Copy do estado das reservas de peca, derivada do STATUS da OS (a view nao
+// expoe a quantidade reservada por peca). Reflete a politica de estoque da
+// Fase 2: reserva na inclusao -> baixa em EM_EXECUCAO -> estorno em CANCELADA.
+function reservaInfoParaStatus(
+  status: OsDetalhesView['cabecalho']['status'],
+): { tone: string; text: string } | null {
+  switch (status) {
+    case 'RECEBIDA':
+    case 'EM_DIAGNOSTICO':
+    case 'AGUARDANDO_APROVACAO':
+      return {
+        tone: 'bg-amber-50 text-amber-800 border-amber-200',
+        text: 'Pecas reservadas em estoque — ainda nao baixadas. A baixa ocorre quando a OS entra em execucao.',
+      };
+    case 'EM_EXECUCAO':
+    case 'FINALIZADA':
+    case 'ENTREGUE':
+      return {
+        tone: 'bg-green-50 text-green-800 border-green-200',
+        text: 'Pecas baixadas do estoque (consumo confirmado na execucao).',
+      };
+    case 'CANCELADA':
+      return {
+        tone: 'bg-slate-50 text-slate-600 border-slate-200',
+        text: 'Reservas de pecas estornadas ao estoque (OS cancelada).',
+      };
+    default:
+      return null;
+  }
+}
+
 export function OrdemServicoDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
 
   const { data: os, isLoading } = useQuery({
     queryKey: ['ordens-servico', id],
-    queryFn: () =>
-      apiRequest<OrdemDeServico>(`/ordens-servico/${id}`),
+    queryFn: () => apiRequest<OsDetalhesView>(`/ordens-servico/${id}`),
     enabled: !!id,
   });
 
-  const { data: cliente } = useQuery({
-    queryKey: ['cliente', os?.clienteId],
+  const { data: auditLog } = useQuery({
+    queryKey: ['ordens-servico', id, 'audit-log'],
     queryFn: () =>
-      apiRequest<Cliente>(`/clientes/${os!.clienteId}`),
-    enabled: !!os?.clienteId,
-  });
-
-  const { data: veiculos } = useQuery({
-    queryKey: ['veiculos', 'all'],
-    queryFn: () =>
-      apiRequest<Paginated<Veiculo>>('/veiculos', {
-        query: { page: 1, limit: 200 },
-      }),
+      apiRequest<AuditLogEntry[]>(`/ordens-servico/${id}/audit-log`),
+    enabled: !!id,
   });
 
   const { data: servicos } = useQuery({
@@ -98,12 +123,6 @@ export function OrdemServicoDetailPage() {
     queryKey: ['usuarios'],
     queryFn: () => apiRequest<Usuario[] | Paginated<Usuario>>('/usuario'),
   });
-
-  const veiculo = veiculos?.data.find((v) => v.id === os?.veiculoId);
-  const servicoNome = (sid: string) =>
-    servicos?.data.find((s) => s.id === sid)?.nome ?? sid;
-  const produtoNome = (pid: string) =>
-    produtos?.data.find((p) => p.id === pid)?.nome ?? pid;
 
   const mecanicos: Usuario[] = (() => {
     if (!usuarios) return [];
@@ -170,11 +189,22 @@ export function OrdemServicoDetailPage() {
     onSuccess: () => {
       toast('Produto vinculado ao servico', 'success');
       invalidate();
+      // A inclusao reserva estoque — atualiza catalogo/estoque exibido.
+      qc.invalidateQueries({ queryKey: ['produtos'] });
       setShowAddProduto(null);
       setNovoProdutoId('');
       setNovoProdutoQtd(1);
+      setAddProdutoErro(null);
     },
-    onError: (e: Error) => toast(e.message, 'error'),
+    onError: (e: Error) => {
+      // Estoque insuficiente chega como 409; mostra inline no modal.
+      const status = (e as { status?: number }).status;
+      if (status === 409) {
+        setAddProdutoErro(e.message);
+      } else {
+        toast(e.message, 'error');
+      }
+    },
   });
 
   const removerProdutoMut = useMutation({
@@ -240,6 +270,8 @@ export function OrdemServicoDetailPage() {
       toast('Orcamento aprovado', 'success');
       invalidate();
       qc.invalidateQueries({ queryKey: ['ordens-servico'] });
+      // Aprovacao leva a EM_EXECUCAO -> baixa de estoque das pecas.
+      qc.invalidateQueries({ queryKey: ['produtos'] });
     },
     onError: (e: Error) => toast(e.message, 'error'),
   });
@@ -250,6 +282,8 @@ export function OrdemServicoDetailPage() {
       toast('Orcamento rejeitado', 'success');
       invalidate();
       qc.invalidateQueries({ queryKey: ['ordens-servico'] });
+      // Rejeicao leva a CANCELADA -> estorno das reservas de peca.
+      qc.invalidateQueries({ queryKey: ['produtos'] });
     },
     onError: (e: Error) => toast(e.message, 'error'),
   });
@@ -274,6 +308,18 @@ export function OrdemServicoDetailPage() {
     onError: (e: Error) => toast(e.message, 'error'),
   });
 
+  const deletarMut = useMutation({
+    mutationFn: () => apiRequest(`/ordens-servico/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast('OS deletada', 'success');
+      qc.invalidateQueries({ queryKey: ['ordens-servico'] });
+      // Deletar uma OS pre-execucao estorna as reservas -> estoque muda.
+      qc.invalidateQueries({ queryKey: ['produtos'] });
+      navigate('/ordens-servico');
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+
   const [showAddServico, setShowAddServico] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [diagText, setDiagText] = useState('');
@@ -283,32 +329,28 @@ export function OrdemServicoDetailPage() {
   const [showAddProduto, setShowAddProduto] = useState<string | null>(null);
   const [novoProdutoId, setNovoProdutoId] = useState('');
   const [novoProdutoQtd, setNovoProdutoQtd] = useState(1);
+  const [addProdutoErro, setAddProdutoErro] = useState<string | null>(null);
   // servicoId atualmente aberto no modal de concluir (registro de horas)
   const [showConcluirServico, setShowConcluirServico] = useState<string | null>(
     null,
   );
   const [horasTrabalhadas, setHorasTrabalhadas] = useState<number>(1);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   if (isLoading || !os) {
     return <div className="text-slate-500">Carregando...</div>;
   }
 
-  const totalServicos =
-    os.itensServico?.reduce(
-      (sum, i) => sum + i.quantidade * Number(i.precoUnitario),
-      0,
-    ) ?? 0;
-  const totalProdutos =
-    os.itensServico?.reduce(
-      (sum, i) =>
-        sum +
-        (i.produtos ?? []).reduce(
-          (s, p) => s + p.quantidade * Number(p.precoUnitario),
-          0,
-        ),
-      0,
-    ) ?? 0;
-  const total = totalServicos + totalProdutos;
+  const status = os.cabecalho.status;
+  const cliente = os.cabecalho.dadosCliente;
+  const veiculo = os.cabecalho.dadosVeiculo;
+  const itens = os.corpo.servicos;
+
+  const servicoNomeNaOs = (sid: string) =>
+    itens.find((s) => s.servicoId === sid)?.descricaoServico ?? sid;
+
+  const temPecas = itens.some((s) => s.produtos.length > 0);
+  const reservaInfo = temPecas ? reservaInfoParaStatus(status) : null;
 
   return (
     <div className="space-y-6">
@@ -323,12 +365,32 @@ export function OrdemServicoDetailPage() {
 
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{os.numero}</h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
-            <StatusBadge status={os.status} />
-            <span>Atualizada em {formatDate(os.updatedAt)}</span>
+          <h1 className="text-2xl font-bold">{os.cabecalho.numero}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+            <StatusBadge status={status} />
+            <span>Mecanico: {os.cabecalho.mecanicoAtribuido ?? '-'}</span>
+            <span>
+              Atualizada em {os.cabecalho.dataHoraUltimaAtualizacao ?? '-'}
+            </span>
           </div>
         </div>
+        {isAdmin && (
+          <Button
+            variant="ghost"
+            className="text-red-600 hover:bg-red-50"
+            disabled={deletarMut.isPending}
+            onClick={() => {
+              if (
+                confirm(
+                  'Deletar esta OS? Se ela ainda nao entrou em execucao, as reservas de peca serao estornadas ao estoque.',
+                )
+              )
+                deletarMut.mutate();
+            }}
+          >
+            Deletar OS
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -337,10 +399,10 @@ export function OrdemServicoDetailPage() {
             <CardTitle>Cliente</CardTitle>
           </CardHeader>
           <CardBody className="text-sm">
-            <p className="font-medium">{cliente?.nome ?? '-'}</p>
-            <p className="text-slate-500">CPF/CNPJ: {cliente?.cpfCnpj}</p>
-            <p className="text-slate-500">Email: {cliente?.email ?? '-'}</p>
-            <p className="text-slate-500">Telefone: {cliente?.telefone}</p>
+            <p className="font-medium">{cliente.nome}</p>
+            <p className="text-slate-500">CPF/CNPJ: {cliente.cpfCnpj || '-'}</p>
+            <p className="text-slate-500">Email: {cliente.email ?? '-'}</p>
+            <p className="text-slate-500">Telefone: {cliente.telefone || '-'}</p>
           </CardBody>
         </Card>
         <Card>
@@ -348,16 +410,11 @@ export function OrdemServicoDetailPage() {
             <CardTitle>Veiculo</CardTitle>
           </CardHeader>
           <CardBody className="text-sm">
-            {veiculo ? (
-              <>
-                <p className="font-mono text-base">{veiculo.placa}</p>
-                <p>
-                  {veiculo.marca} {veiculo.modelo} ({veiculo.ano})
-                </p>
-              </>
-            ) : (
-              '-'
-            )}
+            <p className="font-mono text-base">{veiculo.placa || '-'}</p>
+            <p>
+              {veiculo.marca} {veiculo.modelo}
+              {veiculo.ano ? ` (${veiculo.ano})` : ''}
+            </p>
           </CardBody>
         </Card>
       </div>
@@ -367,17 +424,17 @@ export function OrdemServicoDetailPage() {
           <CardTitle>Descricao inicial</CardTitle>
         </CardHeader>
         <CardBody className="text-sm whitespace-pre-wrap">
-          {os.descricaoInicial}
+          {os.corpo.descricaoInicial}
         </CardBody>
       </Card>
 
-      {os.diagnostico && (
+      {os.corpo.diagnostico && (
         <Card>
           <CardHeader>
             <CardTitle>Diagnostico</CardTitle>
           </CardHeader>
           <CardBody className="text-sm whitespace-pre-wrap">
-            {os.diagnostico}
+            {os.corpo.diagnostico}
           </CardBody>
         </Card>
       )}
@@ -388,7 +445,7 @@ export function OrdemServicoDetailPage() {
           <CardTitle>Acoes</CardTitle>
         </CardHeader>
         <CardBody className="flex flex-wrap gap-2">
-          {os.status === 'RECEBIDA' && (
+          {status === 'RECEBIDA' && (
             <Select
               className="max-w-xs"
               defaultValue=""
@@ -405,7 +462,7 @@ export function OrdemServicoDetailPage() {
             </Select>
           )}
 
-          {os.status === 'EM_DIAGNOSTICO' && (
+          {status === 'EM_DIAGNOSTICO' && (
             <>
               <Button onClick={() => setShowAddServico(true)}>
                 + Servico
@@ -413,9 +470,9 @@ export function OrdemServicoDetailPage() {
               <Button
                 variant="primary"
                 onClick={() => setShowDiag(true)}
-                disabled={(os.itensServico?.length ?? 0) === 0}
+                disabled={itens.length === 0}
                 title={
-                  (os.itensServico?.length ?? 0) === 0
+                  itens.length === 0
                     ? 'Adicione pelo menos um servico antes'
                     : ''
                 }
@@ -425,25 +482,31 @@ export function OrdemServicoDetailPage() {
             </>
           )}
 
-          {os.status === 'AGUARDANDO_APROVACAO' && (
-            <>
-              <Button
-                onClick={() => aprovarMut.mutate()}
-                disabled={aprovarMut.isPending}
-              >
-                Aprovar (em nome do cliente)
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => rejeitarMut.mutate()}
-                disabled={rejeitarMut.isPending}
-              >
-                Rejeitar
-              </Button>
-            </>
-          )}
+          {status === 'AGUARDANDO_APROVACAO' &&
+            (isAdmin ? (
+              <>
+                <Button
+                  onClick={() => aprovarMut.mutate()}
+                  disabled={aprovarMut.isPending}
+                >
+                  Aprovar (em nome do cliente)
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => rejeitarMut.mutate()}
+                  disabled={rejeitarMut.isPending}
+                >
+                  Rejeitar
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-slate-600">
+                A aprovacao ou rejeicao do orcamento e feita pelo cliente no
+                portal, ou por um usuario ADMIN em nome do cliente.
+              </p>
+            ))}
 
-          {os.status === 'EM_EXECUCAO' && (
+          {status === 'EM_EXECUCAO' && (
             <div className="flex w-full flex-col gap-2">
               <p className="text-sm text-slate-600">
                 Inicie e conclua cada servico individualmente nos cards abaixo.
@@ -463,7 +526,7 @@ export function OrdemServicoDetailPage() {
             </div>
           )}
 
-          {os.status === 'FINALIZADA' && (
+          {status === 'FINALIZADA' && (
             <Button
               onClick={() => entregarMut.mutate()}
               disabled={entregarMut.isPending}
@@ -472,9 +535,9 @@ export function OrdemServicoDetailPage() {
             </Button>
           )}
 
-          {(os.status === 'ENTREGUE' || os.status === 'CANCELADA') && (
+          {(status === 'ENTREGUE' || status === 'CANCELADA') && (
             <p className="text-sm text-slate-500">
-              OS finalizada — sem acoes disponiveis.
+              OS encerrada — sem acoes disponiveis.
             </p>
           )}
         </CardBody>
@@ -485,15 +548,32 @@ export function OrdemServicoDetailPage() {
           <CardTitle>Servicos e produtos</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
-          {(os.itensServico ?? []).length === 0 && (
+          {reservaInfo && (
+            <div
+              className={cn(
+                'rounded-md border px-3 py-2 text-xs',
+                reservaInfo.tone,
+              )}
+            >
+              {reservaInfo.text}
+            </div>
+          )}
+          {status === 'EM_DIAGNOSTICO' && temPecas && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Remover um servico ou peca aqui <strong>nao</strong> estorna a
+              reserva de estoque automaticamente (diferente do cancelamento da
+              OS, que estorna). Ajuste o estoque manualmente se precisar.
+            </div>
+          )}
+          {itens.length === 0 && (
             <div className="py-6 text-center text-sm text-slate-500">
               Sem servicos adicionados.
             </div>
           )}
-          {(os.itensServico ?? []).map((i) => {
-            const subtotalServico = i.quantidade * Number(i.precoUnitario);
-            const subtotalProdutos = (i.produtos ?? []).reduce(
-              (s, p) => s + p.quantidade * Number(p.precoUnitario),
+          {itens.map((i) => {
+            const subtotalServico = i.valorTotalDesseServico;
+            const subtotalProdutos = i.produtos.reduce(
+              (s, p) => s + p.valorTotalDesseProduto,
               0,
             );
             return (
@@ -505,7 +585,7 @@ export function OrdemServicoDetailPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="font-medium text-slate-900">
-                        {servicoNome(i.servicoId)}
+                        {i.descricaoServico}
                       </div>
                       <ItemExecucaoBadge status={i.statusExecucao} />
                     </div>
@@ -525,8 +605,7 @@ export function OrdemServicoDetailPage() {
                       {i.statusExecucao === 'CONCLUIDO' && i.fimExecucao && (
                         <>
                           {' '}
-                          · concluido em{' '}
-                          {formatDate(i.fimExecucao)}
+                          · concluido em {formatDate(i.fimExecucao)}
                           {i.horasTrabalhadas
                             ? ` (${i.horasTrabalhadas}h trabalhadas)`
                             : ''}
@@ -535,7 +614,7 @@ export function OrdemServicoDetailPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {os.status === 'EM_DIAGNOSTICO' && (
+                    {status === 'EM_DIAGNOSTICO' && (
                       <>
                         <Button
                           size="sm"
@@ -543,6 +622,7 @@ export function OrdemServicoDetailPage() {
                           onClick={() => {
                             setNovoProdutoId('');
                             setNovoProdutoQtd(1);
+                            setAddProdutoErro(null);
                             setShowAddProduto(i.servicoId);
                           }}
                         >
@@ -558,7 +638,7 @@ export function OrdemServicoDetailPage() {
                         </Button>
                       </>
                     )}
-                    {os.status === 'EM_EXECUCAO' &&
+                    {status === 'EM_EXECUCAO' &&
                       i.statusExecucao === 'PENDENTE' && (
                         <Button
                           size="sm"
@@ -568,7 +648,7 @@ export function OrdemServicoDetailPage() {
                           Iniciar
                         </Button>
                       )}
-                    {os.status === 'EM_EXECUCAO' &&
+                    {status === 'EM_EXECUCAO' &&
                       i.statusExecucao === 'EM_EXECUCAO' && (
                         <Button
                           size="sm"
@@ -607,20 +687,18 @@ export function OrdemServicoDetailPage() {
                     </TR>
                   </THead>
                   <TBody>
-                    {(i.produtos ?? []).map((p) => (
+                    {i.produtos.map((p) => (
                       <TR key={p.produtoId}>
-                        <TD>{produtoNome(p.produtoId)}</TD>
+                        <TD>{p.descricaoProduto}</TD>
                         <TD className="text-right">{p.quantidade}</TD>
                         <TD className="text-right">
                           {formatCurrency(Number(p.precoUnitario))}
                         </TD>
                         <TD className="text-right">
-                          {formatCurrency(
-                            p.quantidade * Number(p.precoUnitario),
-                          )}
+                          {formatCurrency(p.valorTotalDesseProduto)}
                         </TD>
                         <TD className="text-right">
-                          {os.status === 'EM_DIAGNOSTICO' && (
+                          {status === 'EM_DIAGNOSTICO' && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -638,14 +716,14 @@ export function OrdemServicoDetailPage() {
                         </TD>
                       </TR>
                     ))}
-                    {(i.produtos ?? []).length === 0 && (
+                    {i.produtos.length === 0 && (
                       <TR>
                         <TD
                           colSpan={5}
                           className="py-4 text-center text-xs text-slate-500"
                         >
                           Nenhum produto vinculado a este servico
-                          {os.status === 'EM_DIAGNOSTICO' &&
+                          {status === 'EM_DIAGNOSTICO' &&
                             ' — use "+ Produto" para adicionar'}
                         </TD>
                       </TR>
@@ -656,13 +734,61 @@ export function OrdemServicoDetailPage() {
             );
           })}
           <div className="mt-4 space-y-1 text-right text-sm">
-            <div>Servicos: {formatCurrency(totalServicos)}</div>
-            <div>Produtos: {formatCurrency(totalProdutos)}</div>
+            <div>Servicos: {formatCurrency(os.rodape.valorTotalServicos)}</div>
+            <div>Produtos: {formatCurrency(os.rodape.valorTotalProdutos)}</div>
             <div className="text-lg font-semibold">
-              Total: {formatCurrency(total)}
+              Total: {formatCurrency(os.rodape.valorTotalOrdemServico)}
             </div>
           </div>
         </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <CardTitle>Historico (audit log)</CardTitle>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowAuditLog((v) => !v)}
+          >
+            {showAuditLog ? 'Ocultar' : `Mostrar (${auditLog?.length ?? 0})`}
+          </Button>
+        </CardHeader>
+        {showAuditLog && (
+          <CardBody>
+            {(auditLog?.length ?? 0) === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nenhum registro de auditoria.
+              </p>
+            ) : (
+              <ol className="space-y-3">
+                {auditLog!.map((log) => (
+                  <li
+                    key={log.id}
+                    className="border-l-2 border-slate-200 pl-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-900">
+                        {log.acao}
+                      </span>
+                      {log.statusAnterior && log.statusNovo && (
+                        <span className="text-xs text-slate-500">
+                          {log.statusAnterior} → {log.statusNovo}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {formatDate(log.createdAt)}
+                      {log.usuarioId
+                        ? ` · usuario ${log.usuarioId.slice(0, 8)}`
+                        : ''}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardBody>
+        )}
       </Card>
 
       <Dialog
@@ -765,7 +891,7 @@ export function OrdemServicoDetailPage() {
         open={showConcluirServico !== null}
         onClose={() => setShowConcluirServico(null)}
         title={`Concluir servico${
-          showConcluirServico ? ` "${servicoNome(showConcluirServico)}"` : ''
+          showConcluirServico ? ` "${servicoNomeNaOs(showConcluirServico)}"` : ''
         }`}
         size="sm"
       >
@@ -815,7 +941,7 @@ export function OrdemServicoDetailPage() {
         open={showAddProduto !== null}
         onClose={() => setShowAddProduto(null)}
         title={`Adicionar produto ao servico${
-          showAddProduto ? ` "${servicoNome(showAddProduto)}"` : ''
+          showAddProduto ? ` "${servicoNomeNaOs(showAddProduto)}"` : ''
         }`}
         size="sm"
       >
@@ -841,12 +967,21 @@ export function OrdemServicoDetailPage() {
               <option value="">Selecione</option>
               {(produtos?.data ?? [])
                 .filter((p) => p.ativo)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} — {formatCurrency(Number(p.precoUnitario))} (estoque{' '}
-                    {p.quantidadeDisponivel ?? p.quantidadeEstoque})
-                  </option>
-                ))}
+                .map((p) => {
+                  const disponivel =
+                    p.quantidadeDisponivel ?? p.quantidadeEstoque;
+                  return (
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      disabled={disponivel <= 0}
+                    >
+                      {p.nome} — {formatCurrency(Number(p.precoUnitario))}{' '}
+                      (estoque {disponivel}
+                      {disponivel <= 0 ? ' — indisponivel' : ''})
+                    </option>
+                  );
+                })}
             </Select>
           </div>
           <div>
@@ -859,6 +994,11 @@ export function OrdemServicoDetailPage() {
               required
             />
           </div>
+          {addProdutoErro && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {addProdutoErro}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="outline"

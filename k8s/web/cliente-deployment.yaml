@@ -1,0 +1,79 @@
+# Deployment da UI Cliente (SPA React/Vite servida por nginx).
+#
+# A imagem e um nginx-unprivileged (uid 101) que serve os assets estaticos de
+# `web/cliente/dist` e faz fallback SPA para /index.html (ver web/cliente/nginx.conf).
+# Escuta na 8080 (imagem unprivileged nao consegue bindar <1024).
+#
+# ATENCAO — VITE_API_URL e "baked" em BUILD time: o Vite injeta a URL da API no
+# bundle durante o `npm run build`. Trocar env no runtime NAO tem efeito. Para o
+# cluster, faca o build passando --build-arg VITE_API_URL=<URL in-cluster/ingress>
+# (ver web/cliente/.env.example). O default do Dockerfile e http://localhost:3000.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oficina-web-cliente
+  labels:
+    app.kubernetes.io/name: oficina-web-cliente
+    app.kubernetes.io/part-of: oficina-mecanica
+    app.kubernetes.io/component: web-cliente
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oficina-web-cliente
+      app.kubernetes.io/component: web-cliente
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oficina-web-cliente
+        app.kubernetes.io/part-of: oficina-mecanica
+        app.kubernetes.io/component: web-cliente
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # uid 101 = usuario `nginx` da imagem nginxinc/nginx-unprivileged.
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web-cliente
+          image: oficina-mecanica-web-cliente:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # SPA estatica: liveness/readiness batem em / (index.html servido pelo nginx).
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

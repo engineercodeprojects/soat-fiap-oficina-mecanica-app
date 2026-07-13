@@ -1,0 +1,22 @@
+# Service ClusterIP: expoe a UI Admin dentro do cluster (porta 8080).
+# Sem ingress no MVP — acesse de fora com:
+#   kubectl port-forward -n oficina svc/oficina-web-admin 8080:8080
+apiVersion: v1
+kind: Service
+metadata:
+  name: oficina-web-admin
+  labels:
+    app.kubernetes.io/name: oficina-web-admin
+    app.kubernetes.io/part-of: oficina-mecanica
+    app.kubernetes.io/component: web-admin
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: oficina-web-admin
+    app.kubernetes.io/component: web-admin
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http

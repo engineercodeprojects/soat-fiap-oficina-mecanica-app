@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardBody } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { Dialog } from '@/components/ui/dialog';
+import { Pagination } from '@/components/ui/pagination';
 import { toast } from '@/components/ui/toast';
 import { formatCurrency } from '@/lib/utils';
 
@@ -25,16 +26,20 @@ const empty: FormState = {
   tempoEstimadoHoras: 1,
 };
 
+const limit = 20;
+
 export function ServicosListPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['servicos'],
+    queryKey: ['servicos', page],
     queryFn: () =>
       apiRequest<Paginated<Servico>>('/servicos', {
-        query: { page: 1, limit: 100 },
+        query: { page, limit },
       }),
+    placeholderData: (prev) => prev,
   });
 
   const createMut = useMutation({
@@ -160,6 +165,12 @@ export function ServicosListPage() {
               </TBody>
             </Table>
           )}
+          <Pagination
+            page={page}
+            limit={limit}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+          />
         </CardBody>
       </Card>
 

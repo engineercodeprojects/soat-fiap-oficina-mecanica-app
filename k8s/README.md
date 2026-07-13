@@ -1,7 +1,8 @@
 # Deploy em Kubernetes — Manifestos da Aplicação (US-F2-05)
 
-Manifestos Kustomize da **aplicação** (API NestJS). O **cluster e o banco** são
-provisionados via Terraform (US-F2-06) — ver [`infra/terraform/`](../infra/terraform/README.md).
+Manifestos Kustomize da **aplicação** (API NestJS) e das duas **UIs** (SPAs
+Admin e Cliente, servidas por nginx). O **cluster e o banco** são provisionados
+via Terraform (US-F2-06) — ver [`infra/terraform/`](../infra/terraform/README.md).
 A separação provisioning (IaC) ↔ application deploy é exigência da Fase 2.
 
 ## O que tem aqui
@@ -15,6 +16,10 @@ A separação provisioning (IaC) ↔ application deploy é exigência da Fase 2.
 | `app/deployment.yaml` | Deployment `oficina-app` — 2 réplicas, probes, resources |
 | `app/service.yaml` | Service ClusterIP `oficina-app` (porta 3000) |
 | `app/hpa.yaml` | HPA — CPU 70% / memória 80%, min 2 / max 10 |
+| `web/admin-deployment.yaml` | Deployment `oficina-web-admin` — SPA Admin (nginx), porta 8080 |
+| `web/admin-service.yaml` | Service ClusterIP `oficina-web-admin` (porta 8080) |
+| `web/cliente-deployment.yaml` | Deployment `oficina-web-cliente` — SPA Cliente (nginx), porta 8080 |
+| `web/cliente-service.yaml` | Service ClusterIP `oficina-web-cliente` (porta 8080) |
 | `kustomization.yaml` | Agrega tudo no namespace `oficina` |
 
 ### Contrato de Secrets (single-writer-per-Secret)
@@ -70,6 +75,59 @@ kubectl port-forward -n oficina svc/oficina-app 3000:3000
 curl localhost:3000/health          # liveness
 curl localhost:3000/health/ready    # readiness (checa o banco)
 ```
+
+## UIs (SPAs Admin e Cliente)
+
+Os dois front-ends (`web/admin`, `web/cliente`) são SPAs React/Vite servidas por
+**nginx-unprivileged** (uid 101, escutando na **8080**, com fallback SPA para
+`index.html`). Cada um tem um Deployment (1 réplica) + Service ClusterIP.
+
+| Recurso | Deployment | Service (ClusterIP) | Imagem (kustomize) |
+|---|---|---|---|
+| UI Admin | `oficina-web-admin` | `oficina-web-admin:8080` | `oficina-mecanica-web-admin` |
+| UI Cliente | `oficina-web-cliente` | `oficina-web-cliente:8080` | `oficina-mecanica-web-cliente` |
+
+Os nomes de imagem seguem o mesmo padrão do `oficina-mecanica-app`, com sufixo
+`-web-admin` / `-web-cliente`. Em GHCR ficariam
+`ghcr.io/<owner>/<repo>-web-admin` e `…-web-cliente`.
+
+### ⚠️ `VITE_API_URL` é baked em BUILD time
+
+O Vite injeta `VITE_API_URL` **no bundle durante o `npm run build`** — não é lido
+em runtime. Logo, definir env no pod **não** muda a URL da API. Para o cluster,
+faça o build passando a URL da API acessível **pelo navegador** (não `localhost`
+de dentro do pod) como build-arg:
+
+```bash
+# API alcançada via port-forward no host -> localhost:3000
+docker build --build-arg VITE_API_URL=http://localhost:3000 \
+  -t oficina-mecanica-web-admin:latest   ./web/admin
+docker build --build-arg VITE_API_URL=http://localhost:3000 \
+  -t oficina-mecanica-web-cliente:latest ./web/cliente
+
+# carrega no kind (ou publique no GHCR e faça `kustomize edit set image …`)
+kind load docker-image oficina-mecanica-web-admin:latest   --name oficina-local
+kind load docker-image oficina-mecanica-web-cliente:latest --name oficina-local
+```
+
+Com **ingress/domínio real**, use `VITE_API_URL=https://api.suaoficina.com`.
+Ver `web/admin/.env.example` e `web/cliente/.env.example`.
+
+### Acessar as UIs (sem ingress no MVP)
+
+Sem ingress, o acesso é por `kubectl port-forward` para cada Service. As portas de
+host abaixo (8080 admin, 8081 cliente) espelham o `docker-compose` e são as origens
+já liberadas em `WEB_ORIGINS` (ver `configmap.yaml`):
+
+```bash
+kubectl port-forward -n oficina svc/oficina-web-admin   8080:8080   # Admin   -> http://localhost:8080
+kubectl port-forward -n oficina svc/oficina-web-cliente 8081:8080   # Cliente -> http://localhost:8081
+kubectl port-forward -n oficina svc/oficina-app         3000:3000   # API     -> http://localhost:3000
+```
+
+> Como a UI foi buildada com `VITE_API_URL=http://localhost:3000`, mantenha o
+> port-forward da API na 3000 aberto enquanto usa as SPAs no navegador. Se mudar
+> a URL da API, rebuilde a imagem da UI **e** ajuste `WEB_ORIGINS` no ConfigMap.
 
 ## Validar o HPA (escala sob carga)
 

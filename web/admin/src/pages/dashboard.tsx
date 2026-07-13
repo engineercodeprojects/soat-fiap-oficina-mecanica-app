@@ -24,8 +24,10 @@ export function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['ordens-servico', 'dashboard'],
     queryFn: () =>
+      // incluirEncerradas para que os cards FINALIZADA/ENTREGUE/CANCELADA
+      // (excluidos por padrao) tambem sejam contados.
       apiRequest<Paginated<OrdemDeServico>>('/ordens-servico', {
-        query: { page: 1, limit: 100 },
+        query: { page: 1, limit: 200, incluirEncerradas: 'true' },
       }),
   });
 
