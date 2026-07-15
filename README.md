@@ -41,8 +41,7 @@ Diagramas de **componentes da aplicação**, **infraestrutura provisionada** e
 | Pipeline CI/CD | [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) |
 | Testes de carga / escalabilidade | [`perf/`](perf) · [`perf/README.md`](perf/README.md) |
 | Collection das APIs (Swagger/OpenAPI) | `http://localhost:3000/api` (com a app rodando) — ver [Collection das APIs](#collection-das-apis) |
-| Vídeo demonstrativo (≤15 min) | [Vídeo de apresentação](https://drive.google.com/file/d/1K5Qihz4IGKitT791J9-3o77F8kg_
-ujvd/view) |
+| Vídeo demonstrativo (≤15 min) | https://drive.google.com/file/d/1K5Qihz4IGKitT791J9-3o77F8kg_ujvd/view |
 
 ---
 
