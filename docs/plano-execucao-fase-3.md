@@ -149,7 +149,10 @@ Dependência: tudo pronto.
 | f3-doc-07 | QA Plans (backfill + Fase 3) | 5 | 4 (docs) | 5 | Média |
 | f3-12 | Entrega: vídeo + PDF + soat-architecture | 6 | todos | 2 | Alta |
 
-**Total:** ~95 SP · 18 histórias.
+**Total:** ~95 SP · 19 histórias.
+
+> Sincronização com o board do Notion: ver
+> [f3-notion-import.md](user-stories/f3-notion-import.md).
 
 ---
 
