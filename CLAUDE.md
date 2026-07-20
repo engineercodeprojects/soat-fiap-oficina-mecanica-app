@@ -98,6 +98,44 @@ User stories are in `docs/user-stories/` and also on the Notion board (Tech Chal
 | US-22 | Automated Tests (80% coverage) | 8 | All |
 | US-23 | Swagger Documentation | 2 | All |
 
+### Fase 2 — Quality, Resilience & Scalability (`f2-*`)
+
+Refactor to Clean Architecture, API tweaks, webhook notification, Docker review,
+Kubernetes manifests, Terraform (cluster + DB), CI/CD and load tests. Stories in
+`docs/user-stories/f2-*.md`. Plan: `docs/plano-execucao-fase-2.md`.
+
+### Fase 3 — Cloud, Security & Observability (`f3-*`)
+
+Serverless CPF auth + API Gateway, AWS cloud infra (EKS/RDS via Terraform),
+4-repo split with per-repo CI/CD, observability, and formal architecture docs.
+Full plan (gap analysis, decisions, 4-repo map, waves): `docs/plano-execucao-fase-3.md`.
+Notion import manifest: `docs/user-stories/f3-notion-import.md`.
+
+| # | Story | SP | Wave | Repo |
+|---|---|---|---|---|
+| US-F3-DOC-01 | RFCs (cloud, DB, auth) | 3 | 0 | app/docs |
+| US-F3-DOC-02 | ADRs (comm pattern, HPA, ...) | 2 | 0 | app/docs |
+| US-F3-01 | Serverless CPF Authentication (Lambda) | 8 | 1 | lambda |
+| US-F3-02 | API Gateway + route protection | 5 | 1 | lambda/infra-k8s |
+| US-F3-03 | App as Resource Server (validate-only) | 5 | 1 | app |
+| US-F3-04 | Terraform: Managed Database (RDS) | 5 | 2 | infra-db |
+| US-F3-05 | Terraform: Kubernetes Cluster (EKS) | 8 | 2 | infra-k8s |
+| US-F3-06 | Application deploy on EKS | 5 | 3 | app |
+| US-F3-07 | 4-repo split + branch protection | 5 | 3 | all |
+| US-F3-08 | Per-repo CI/CD with auto deploy | 8 | 3 | all |
+| US-F3-09 | Structured JSON logs + correlation | 3 | 4 | app |
+| US-F3-10 | Observability: APM, infra metrics, uptime | 5 | 4 | app/infra-k8s |
+| US-F3-11 | Dashboards & alerts | 5 | 4 | app |
+| US-F3-DOC-03 | Component + sequence diagrams | 3 | 5 | app/docs |
+| US-F3-DOC-04 | DB justification + relational model + ER | 3 | 5 | app/docs |
+| US-F3-DOC-05 | Per-repo READMEs | 3 | 5 | all |
+| US-F3-DOC-06 | Docs index + main README overhaul | 3 | 5 | app/docs |
+| US-F3-DOC-07 | QA Plans (backfill + Fase 3) | 5 | 5 | app/docs |
+| US-F3-12 | Delivery: video + PDF + soat-architecture | 2 | 6 | all |
+
+**Phase 3 repos:** `oficina-auth-lambda` (1), `oficina-infra-k8s` (2),
+`oficina-infra-db` (3), `oficina-mecanica-app` (4, this repo).
+
 ## Working with user stories
 
 When starting a task, read the corresponding file in `docs/user-stories/` for full context.
