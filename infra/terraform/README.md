@@ -1,4 +1,15 @@
-# Infraestrutura como Código — Terraform (US-F2-06)
+# Infraestrutura como Código — Terraform
+
+| Stage | História | Alvo | Docs |
+|---|---|---|---|
+| `01-cluster` | US-F2-06 | Cluster `kind` local | este README |
+| `02-app` | US-F2-06 | Banco + namespace + Secret no `kind` | este README |
+| `03-gateway` | US-F3-02 | **AWS API Gateway** (HTTP API + Lambda Authorizer + VPC Link) | [03-gateway/README.md](03-gateway/README.md) |
+
+> Os stages 01/02 são da **Fase 2** (demo local em kind). O stage 03 inicia a
+> infra AWS da **Fase 3** (Academy) e migrará de repo na US-F3-07.
+
+## Stages 01/02 — kind (US-F2-06)
 
 Provisiona **cluster Kubernetes + banco de dados** para a app da oficina, em um cluster **`kind`** local (Kubernetes in Docker):
 
