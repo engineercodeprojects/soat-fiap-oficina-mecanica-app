@@ -7,7 +7,7 @@
 **Status:** To Do
 **DDD Domain:** Infraestrutura / Aplicacao
 **DDD Layer:** Infrastructure
-**Repositorio:** 4 — `oficina-mecanica-app` (este repo)
+**Repositorio:** 4 — `soat-fiap-oficina-mecanica-app` (este repo)
 
 ## Contexto
 
