@@ -430,6 +430,8 @@ com as dependências apontando para o domínio (Clean Architecture).
 ## Documentação
 
 - **Swagger:** `http://localhost:3000/api` (quando a app está rodando)
+- **RFCs (decisões técnicas — nuvem, banco, autenticação):** [`docs/arquitetura/rfcs/`](docs/arquitetura/rfcs/README.md)
+- **ADRs (decisões arquiteturais permanentes):** [`docs/arquitetura/adr/`](docs/arquitetura/adr/README.md)
 - **ER Diagram:** `docs/schema.dbml` (importe em [dbdiagram.io](https://dbdiagram.io))
 - **User Stories:** `docs/user-stories/`
 - **QA Plans:** `docs/qa-plans/`
