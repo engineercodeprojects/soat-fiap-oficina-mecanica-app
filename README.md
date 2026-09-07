@@ -14,13 +14,82 @@ PostgreSQL**, segregação em **4 repositórios** com CI/CD independente e
 observabilidade com **Datadog**. Plano completo em
 [`docs/plano-execucao-fase-3.md`](docs/plano-execucao-fase-3.md).
 
+**O que mudou vs Fase 2:** login por email/senha no monólito → **JWT emitido
+somente pela Lambda** (`POST /auth` por CPF) e validado na borda + no app
+(resource server); kind + Postgres in-cluster → **EKS + RDS**; monorepo com um
+pipeline → **4 repositórios** com CI/CD e deploy automático cada; logs simples →
+**logs JSON com correlation-id, APM, dashboards e alertas**.
+
+### Repositórios
+
+| # | Repositório | Propósito |
+|---|---|---|
+| 1 | [`soat-fiap-oficina-auth-lambda`](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda) | Function serverless (AWS Lambda) de **autenticação por CPF** — emite o JWT em `POST /auth` e atua como Lambda Authorizer do API Gateway |
+| 2 | [`soat-fiap-oficina-infra-k8s`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s) | Terraform do **cluster EKS** (VPC, node groups, IAM, add-ons, metrics-server) e do API Gateway/VPC Link |
+| 3 | [`soat-fiap-oficina-infra-db`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db) | Terraform do **banco gerenciado** (RDS PostgreSQL, subnet group, security groups, secret com `DATABASE_URL`) |
+| 4 | [`soat-fiap-oficina-mecanica-app`](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) (este repo) | **Aplicação NestJS** (monólito / resource server) + manifestos Kubernetes + CI/CD de deploy no EKS |
+
 ### Desenho da arquitetura (Fase 3)
 
-Diagrama de **componentes (visão de nuvem)**, diagramas de **sequência**
-(autenticação por CPF e abertura de OS) e **fluxo de deploy dos 4 repositórios**,
-com legenda linkando cada decisão às RFCs/ADRs (renderizados pelo GitHub):
+Visão de nuvem: o **API Gateway é o único ponto público**; a Lambda de CPF emite
+e valida o JWT; o monólito roda no **EKS** (HPA) atrás de VPC Link → ALB
+interno; o banco é **RDS PostgreSQL** em subnets privadas; o agente **Datadog**
+coleta APM, métricas e logs.
+
+```mermaid
+flowchart TB
+    subgraph UI["Clientes / UIs"]
+        ADMIN["web/admin<br/>(staff: CPF + senha)"]
+        CLI["web/cliente<br/>(cliente: só CPF)"]
+    end
+
+    subgraph AWS["AWS (conta Academy)"]
+        GW["API Gateway (HTTP API)<br/>único ponto público"]
+        LAMBDA["Lambda de autenticação por CPF<br/>POST /auth · Lambda Authorizer"]
+        VPCLINK["VPC Link"]
+
+        subgraph VPC["VPC — subnets privadas"]
+            ALB["ALB interno"]
+
+            subgraph EKS["Cluster EKS — namespace oficina"]
+                DEP["Deployment: oficina-app<br/>monólito NestJS (resource server)"]
+                HPA["HPA v2<br/>CPU/mem 70% · min 2 · max 10"]
+                JOB["Job: oficina-migrations"]
+                DDAGENT["Agente Datadog<br/>(APM + infra + logs)"]
+            end
+
+            RDS[("RDS PostgreSQL<br/>Multi-AZ")]
+        end
+
+        SM["Secrets Manager<br/>segredo JWT · DATABASE_URL"]
+        ECR["ECR<br/>imagem da app"]
+    end
+
+    DD["Datadog<br/>dashboards + alertas"]
+
+    ADMIN -- "POST /auth · Bearer JWT" --> GW
+    CLI -- "POST /auth · Bearer JWT" --> GW
+    GW -- "POST /auth" --> LAMBDA
+    GW -. "Lambda Authorizer" .-> LAMBDA
+    GW --> VPCLINK --> ALB --> DEP
+    HPA -- "escala" --> DEP
+    DEP --> RDS
+    JOB --> RDS
+    LAMBDA -- "consulta cliente/status" --> RDS
+    SM -. "segredo JWT" .-> LAMBDA
+    SM -. "segredo JWT + DATABASE_URL" .-> DEP
+    ECR -. "pull" .-> DEP
+    DEP -. "traces · métricas · logs JSON" .-> DDAGENT
+    DDAGENT --> DD
+```
+
+Diagrama completo (com CloudWatch, webhook outbound e legenda), diagramas de
+**sequência** (autenticação por CPF e abertura de OS) e **fluxo de deploy dos 4
+repositórios**, com cada decisão linkada às RFCs/ADRs:
 
 ➡️ **[docs/arquitetura/arquitetura-fase3.md](docs/arquitetura/arquitetura-fase3.md)**
+
+### Entregáveis da Fase 3
 
 | Entregável | Onde |
 |---|---|
@@ -28,6 +97,16 @@ com legenda linkando cada decisão às RFCs/ADRs (renderizados pelo GitHub):
 | RFCs (nuvem, banco, autenticação) | [`docs/arquitetura/rfcs/`](docs/arquitetura/rfcs/README.md) |
 | ADRs (comunicação, HPA, resource server, observabilidade, gateway, 4 repos) | [`docs/arquitetura/adr/`](docs/arquitetura/adr/README.md) |
 | Justificativa do banco + modelo ER | [`docs/arquitetura/banco-de-dados.md`](docs/arquitetura/banco-de-dados.md) |
+| Autenticação serverless por CPF (Lambda + API Gateway) | [`soat-fiap-oficina-auth-lambda`](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda) · [Autenticação](#autenticação) |
+| Cluster EKS via Terraform | [`soat-fiap-oficina-infra-k8s`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s) |
+| Banco RDS PostgreSQL via Terraform | [`soat-fiap-oficina-infra-db`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db) |
+| Deploy da aplicação no EKS (manifestos) | [`k8s/`](k8s) · [`k8s/README.md`](k8s/README.md) |
+| CI/CD multi-repo (um pipeline por repositório, deploy automático) | [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) (este repo) + workflows nos repos 1–3 |
+| Observabilidade (logs JSON + correlation-id, APM, métricas de infra) | [`docs/arquitetura/adr/`](docs/arquitetura/adr/README.md) · dashboards abaixo |
+| Dashboards e alertas (Datadog) | ver [Vídeo demonstrativo e dashboards](#vídeo-demonstrativo-e-dashboards) |
+| Collection das APIs (Swagger/OpenAPI) | `http://localhost:3000/api` (com a app rodando) — ver [Collection das APIs](#collection-das-apis) |
+| Vídeo demonstrativo (≤15 min) | ver [Vídeo demonstrativo e dashboards](#vídeo-demonstrativo-e-dashboards) |
+| PDF de entrega (links dos 4 repos, vídeo e docs) | entregue no Portal do Aluno — enunciado em [`docs/tech-challenges/fase-3-tech-challenge.pdf`](docs/tech-challenges/fase-3-tech-challenge.pdf) |
 
 ---
 
@@ -161,9 +240,55 @@ Quando a OS mudar de status, a API envia `POST` com `Content-Type: application/j
 
 ## Autenticação
 
-A API usa JWT para proteger endpoints administrativos. Endpoints marcados com `@Public()` não requerem autenticação.
+Na **Fase 3** a aplicação é um **resource server**: ela **não emite** tokens,
+apenas **valida** o JWT (HS256, segredo compartilhado via Secrets Manager) e
+autoriza por `role`/claims. O único emissor é a **Lambda de autenticação por
+CPF** ([`soat-fiap-oficina-auth-lambda`](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda)),
+exposta pelo **API Gateway** em `POST /auth`. Endpoints marcados com `@Public()`
+não requerem autenticação. Detalhes e diagrama de sequência em
+[arquitetura-fase3.md](docs/arquitetura/arquitetura-fase3.md#2-diagrama-de-sequência--autenticação).
 
-### Usuários de teste (apenas desenvolvimento)
+### Fluxo por CPF via API Gateway (Fase 3)
+
+1. **Cliente** envia só o CPF; **staff** envia CPF + senha:
+
+   ```bash
+   # cliente
+   curl -X POST https://<api-gateway>/auth \
+     -H "Content-Type: application/json" \
+     -d '{"cpf":"12345678909"}'
+
+   # staff (admin, atendente, mecânico, estoquista)
+   curl -X POST https://<api-gateway>/auth \
+     -H "Content-Type: application/json" \
+     -d '{"cpf":"12345678909","senha":"<senha>"}'
+   ```
+
+2. A Lambda valida o CPF (formato/dígitos), consulta o cadastro/status no RDS,
+   verifica a senha (staff) e responde `200 { "token": "<JWT>" }` com claims
+   `sub`, `cpf`, `role`, `iss` e `exp` (60 min). CPF inválido/não cadastrado →
+   `401`.
+
+3. Rotas protegidas são chamadas **sempre pelo gateway** com
+   `Authorization: Bearer <token>`. O gateway valida o token na borda (Lambda
+   Authorizer, cache 300 s) e encaminha ao monólito via VPC Link → ALB interno;
+   o app **revalida** assinatura/`iss`/`exp` e aplica as regras de role
+   (defesa em profundidade):
+
+   ```bash
+   curl https://<api-gateway>/ordens-servico \
+     -H "Authorization: Bearer <token>"
+   ```
+
+No Swagger (`http://localhost:3000/api`), clique em **Authorize** e cole o token
+obtido na Lambda.
+
+> **Legado (Fase 2):** o endpoint `POST /auth/login` por **email/senha** do
+> monólito é substituído pelo `POST /auth` da Lambda e **não deve ser exposto
+> pelo gateway** na Fase 3. As subseções abaixo permanecem apenas para execução
+> local/desenvolvimento.
+
+### Usuários de teste (Fase 2 / legado — apenas desenvolvimento)
 
 > ⚠️ **Somente para desenvolvimento.** Estes usuários têm senhas conhecidas e
 > **nunca** devem existir em produção. Eles **não** são mais criados pelas
@@ -184,7 +309,7 @@ A API usa JWT para proteger endpoints administrativos. Endpoints marcados com `@
 | ESTOQUISTA | `estoquista@oficina.com` | `estoquista123` |
 | CLIENTE | `cliente@oficina.com` | `cliente123` |
 
-### Fazendo login
+### Fazendo login por email/senha (Fase 2 / legado)
 
 ```bash
 curl -X POST http://localhost:3000/auth/login \
@@ -206,7 +331,7 @@ Resposta:
 }
 ```
 
-### Usando o token
+### Usando o token (local)
 
 Inclua o header `Authorization: Bearer <token>` nas requisições a endpoints protegidos:
 
@@ -214,8 +339,6 @@ Inclua o header `Authorization: Bearer <token>` nas requisições a endpoints pr
 curl http://localhost:3000/auth/me \
   -H "Authorization: Bearer <token>"
 ```
-
-No Swagger (`http://localhost:3000/api`), clique em **Authorize** e cole o token.
 
 ---
 
@@ -292,11 +415,18 @@ bash scripts/local-k8s-forward.sh
 
 ---
 
-## Provisionamento da infraestrutura com Terraform
+## Provisionamento da infraestrutura com Terraform (Fase 2 / legado — kind + Postgres in-cluster)
 
-O Terraform provisiona o **cluster Kubernetes** e o **banco de dados** em dois
-estágios. Detalhes completos e o modo cloud (EKS + RDS) em
-[`infra/terraform/README.md`](infra/terraform/README.md).
+> **Fase 3:** a infraestrutura de nuvem fica em repositórios próprios — o cluster
+> **EKS** em [`soat-fiap-oficina-infra-k8s`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s)
+> e o banco **RDS PostgreSQL gerenciado** em
+> [`soat-fiap-oficina-infra-db`](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db).
+> O Postgres in-cluster abaixo **não é usado na nuvem**; este repo apenas consome
+> `DATABASE_URL` (Secret) produzida pelo repo do banco. Os passos a seguir valem
+> só para o ambiente local (kind).
+
+O Terraform deste repo provisiona o **cluster kind** e o **Postgres in-cluster**
+em dois estágios. Detalhes em [`infra/terraform/README.md`](infra/terraform/README.md).
 
 ```bash
 # Pré-requisitos: terraform >= 1.9, docker e kubectl
@@ -373,11 +503,21 @@ Exemplos de `curl` prontos por domínio em [`docs/`](docs):
 
 ---
 
-## Vídeo demonstrativo
+## Vídeo demonstrativo e dashboards
 
-> ⚠️ **TODO (entrega):** publicar o vídeo (≤15 min) no YouTube/Vimeo demonstrando
-> deploy da aplicação, execução do CI/CD, consumo das APIs e escalabilidade
-> automática (HPA), e substituir este bloco pelo link.
+- **Vídeo Fase 3 (≤15 min):** <!-- TODO: link final do vídeo --> _link a publicar_ —
+  autenticação por CPF, CI/CD dos 4 repos, deploy no EKS, APIs protegidas pelo
+  gateway, dashboards ao vivo e logs/traces.
+- **Vídeo Fase 2:** https://drive.google.com/file/d/1K5Qihz4IGKitT791J9-3o77F8kg_ujvd/view
+
+**Dashboards de observabilidade (Datadog):**
+
+| Dashboard | Link |
+|---|---|
+| APM / traces da aplicação | <!-- TODO --> _a publicar_ |
+| Métricas de infra (EKS, pods, HPA) | <!-- TODO --> _a publicar_ |
+| Logs JSON com correlation-id | <!-- TODO --> _a publicar_ |
+| Alertas / monitores | <!-- TODO --> _a publicar_ |
 
 ---
 
