@@ -10,6 +10,7 @@ documentos abaixo detalham cada tema.
 |---|---|
 | [RFCs](arquitetura/rfcs/README.md) | Decisões técnicas em discussão (nuvem, banco, autenticação) |
 | [ADRs](arquitetura/adr/README.md) | Decisões arquiteturais permanentes |
+| [Arquitetura Fase 3](arquitetura/arquitetura-fase3.md) | Diagrama de componentes (visão de nuvem AWS), sequências de autenticação por CPF e abertura de OS, fluxo de deploy dos 4 repos e legenda RFCs/ADRs (US-F3-DOC-03) |
 | [Arquitetura Fase 2](arquitetura/arquitetura-fase2.md) | Desenho da arquitetura da Fase 2 (Kubernetes, CI/CD, IaC) |
 | [Clean Architecture](arquitetura/clean-architecture.md) | Refatoração para Use Cases + Gateways + Presenters |
 | [Banco de dados](arquitetura/banco-de-dados.md) | Justificativa formal do PostgreSQL/RDS vs alternativas, diagrama ER, relacionamentos, ajustes da Fase 3, consistência e índices (US-F3-DOC-04) |
