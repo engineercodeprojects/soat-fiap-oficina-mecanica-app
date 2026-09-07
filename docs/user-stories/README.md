@@ -68,7 +68,7 @@ e [`plano-execucao-fase-3.md`](../plano-execucao-fase-3.md).
 | US-F3-12 | [Entrega — Video, PDF e Compartilhamento](f3-12-entrega-video-pdf.md) | To Do |
 | US-F3-DOC-01 | [RFCs (Request for Comments)](f3-doc-01-rfcs.md) | Concluída |
 | US-F3-DOC-02 | [ADRs (Architecture Decision Records)](f3-doc-02-adrs.md) | Concluída |
-| US-F3-DOC-03 | [Diagrama de Componentes + Diagramas de Sequencia (Fase 3)](f3-doc-03-arquitetura-diagramas.md) | To Do |
+| US-F3-DOC-03 | [Diagrama de Componentes + Diagramas de Sequencia (Fase 3)](f3-doc-03-arquitetura-diagramas.md) | Concluída |
 | US-F3-DOC-04 | [Justificativa do Banco + Modelo Relacional + ER](f3-doc-04-justificativa-banco-er.md) | Concluída |
 | US-F3-DOC-05 | [READMEs por Repositorio](f3-doc-05-readmes-por-repo.md) | To Do |
 | US-F3-DOC-06 | [Indice de Documentacao + Revisao do README Principal](f3-doc-06-indice-docs-readme.md) | In Progress |
