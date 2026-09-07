@@ -12,6 +12,7 @@ documentos abaixo detalham cada tema.
 | [ADRs](arquitetura/adr/README.md) | Decisões arquiteturais permanentes |
 | [Arquitetura Fase 2](arquitetura/arquitetura-fase2.md) | Desenho da arquitetura da Fase 2 (Kubernetes, CI/CD, IaC) |
 | [Clean Architecture](arquitetura/clean-architecture.md) | Refatoração para Use Cases + Gateways + Presenters |
+| [Banco de dados](arquitetura/banco-de-dados.md) | Justificativa formal do PostgreSQL/RDS vs alternativas, diagrama ER, relacionamentos, ajustes da Fase 3, consistência e índices (US-F3-DOC-04) |
 | [Modelo ER (`schema.dbml`)](schema.dbml) | Diagrama entidade-relacionamento em DBML (importe em [dbdiagram.io](https://dbdiagram.io)) |
 
 ## Event Storming (DDD)
