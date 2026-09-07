@@ -24,7 +24,7 @@ documentos abaixo detalham cada tema.
 
 ## User Stories
 
-- [Índice das histórias por fase](user-stories/README.md) — Fase 1 (US-00 a US-23), Fase 2 (`f2-*`) e Fase 3 (`f3-*`), com status.
+- [Índice das histórias por fase](user-stories/README.md) — Fase 1 (US-00 a US-23), Fase 2 (`f2-*`) e Fase 3 (`f3-*`).
 
 ## QA Plans
 
