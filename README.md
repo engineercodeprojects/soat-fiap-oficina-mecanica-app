@@ -429,10 +429,11 @@ com as dependências apontando para o domínio (Clean Architecture).
 
 ## Documentação
 
+- **Hub de documentação (índice completo):** [`docs/README.md`](docs/README.md)
 - **Swagger:** `http://localhost:3000/api` (quando a app está rodando)
 - **RFCs (decisões técnicas — nuvem, banco, autenticação):** [`docs/arquitetura/rfcs/`](docs/arquitetura/rfcs/README.md)
 - **ADRs (decisões arquiteturais permanentes):** [`docs/arquitetura/adr/`](docs/arquitetura/adr/README.md)
 - **ER Diagram:** `docs/schema.dbml` (importe em [dbdiagram.io](https://dbdiagram.io))
-- **User Stories:** `docs/user-stories/`
-- **QA Plans:** `docs/qa-plans/`
-- **Event Storming:** Miro board (ver `CLAUDE.md` para o ID)
+- **User Stories:** [`docs/user-stories/`](docs/user-stories/README.md)
+- **QA Plans:** [`docs/qa-plans/`](docs/qa-plans/README.md)
+- **Event Storming:** [Miro board (público)](https://miro.com/app/board/uXjVGwyI88w=/?share_link_id=464407873082)
