@@ -433,6 +433,7 @@ com as dependências apontando para o domínio (Clean Architecture).
 - **Swagger:** `http://localhost:3000/api` (quando a app está rodando)
 - **RFCs (decisões técnicas — nuvem, banco, autenticação):** [`docs/arquitetura/rfcs/`](docs/arquitetura/rfcs/README.md)
 - **ADRs (decisões arquiteturais permanentes):** [`docs/arquitetura/adr/`](docs/arquitetura/adr/README.md)
+- **Banco de dados (justificativa PostgreSQL/RDS, ER, relacionamentos, índices):** [`docs/arquitetura/banco-de-dados.md`](docs/arquitetura/banco-de-dados.md)
 - **ER Diagram:** `docs/schema.dbml` (importe em [dbdiagram.io](https://dbdiagram.io))
 - **User Stories:** [`docs/user-stories/`](docs/user-stories/README.md)
 - **QA Plans:** [`docs/qa-plans/`](docs/qa-plans/README.md)
